@@ -1,9 +1,10 @@
-LfpNetwork <- function(xycoords, suffix, stream_vect){
+LfpNetwork <- function(xycoords, suffix, stream_vect, direction){
   # Generate the longest flow path of a basin and its tributaries
   # Args:
   #   xycoords:     One vector with the coordinates of the basin outlet
   #   suffix:       One string for the suffix of the GRASS GIS maps to be generated
   #   stream_vect:  One string of the existing stream network in GRASS GIS
+  #   direction:    Flow direction raster map. May be generated with r.stream*.
   # Returns:
   #   GRASS GIS maps of the longest flow path and its tributaries
   #   of the basin with outlet at xycoords
@@ -18,6 +19,9 @@ LfpNetwork <- function(xycoords, suffix, stream_vect){
   }
   if (!is.character(suffix)) {
     stop("Argument suffix must be a character string.")
+  }
+  if (!is.character(direction)) {
+    stop("Argument direction must be a character string.")
   }
   if (!is.character(stream_vect)) {
     stop("Argument stream_vect must be a character string.")
