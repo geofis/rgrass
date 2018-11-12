@@ -4,7 +4,7 @@ LfpProfilesConcavity <- function(xycoords, network, prefix, dem, direction,
   # of each stream of a network
   # Args:
   #   xycoords:     One vector with the coordinates of the basin outlet.
-  #   network:      One vector with the coordinates of the basin outlet.
+  #   network:      The stream network for which profiles may be generated.
   #   prefix:       One string for the prefix of the profile labels.
   #   dem:          DEM from which to extract z for profiles.
   #   direction:    Flow direction raster map. May be generated with r.stream*.
