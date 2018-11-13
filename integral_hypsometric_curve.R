@@ -1,4 +1,5 @@
-HypsoIntCurve <- function(basins, dem, labelfield, nrow, manexcl){
+HypsoIntCurve <- function(basins, dem, labelfield, nrow,
+                          manexcl = NULL, labelsize = 5){
   # Generate Hypsometric Curve and Hypsometric Integral
   # of each stream of a network
   # Args:
@@ -59,7 +60,7 @@ HypsoIntCurve <- function(basins, dem, labelfield, nrow, manexcl){
   
   # Generate DEMs and data.frames of dimensionless A/Ao and H/Ho, and Hypsometric Integral (AUC)
   index <- gtools::mixedsort(as.character(basins@data[, labelfield]))
-  if (exists('manexcl')) {
+  if (!is.null(manexcl)) {
     index <- index[!index %in% manexcl]
   }
   hypsodfl <- sapply(
@@ -112,7 +113,7 @@ HypsoIntCurve <- function(basins, dem, labelfield, nrow, manexcl){
       "text",
       x = 0.9, y = 0.9,
       label = paste0('HI==', round(HypsoInt[,'hypsoint'],2)),
-      size = 5,
+      size = labelsize,
       hjust = 1,
       parse = T
     ) +
