@@ -7,10 +7,8 @@ TrasnTopoSym <- function(direction, xycoords, suffix){
   #                 X and Y coordinates must be placed in positions 
   #                 1 and 2 of the vector, respectively
   #   suffix:       One string for the names of the GRASS maps and the shapefile.
-  #   ttsoutdir:    Output directory for saving the shapefile with TTS values
-  #   ttsfilename:  Name for the shapefile with TTS values
   # Returns:
-  #   GRASS GIS maps of the magnitude and bearing of T vector of a basin,
+  #   Values and GRASS GIS maps of the magnitude and bearing of T vector of a basin,
   #   as well as the centerline of the basin and a smoothed version of the longest flow path
   # Note:
   #   A GRASS session must be initiated using rgrass7 package
@@ -25,7 +23,7 @@ TrasnTopoSym <- function(direction, xycoords, suffix){
   if (TRUE %in% is.na(xycoords)) {
     stop("Argument xycoords must not have missing values.")
   }
-  
+
   #Packages
   require(rgrass7)
   require(sp)
@@ -210,20 +208,30 @@ TrasnTopoSym <- function(direction, xycoords, suffix){
   #as an index for subsetting points based on a somewhat constant distance
   distxynear@data$seq <- (distxynear@data$cat - 1) %% 5 + 1
   
-  #Probabality of change by change of the magnitude of
+  #Mean value and probabality of change by chance of the magnitude of
   #Transverse Topographic Basin Symmetry (T) for each index number
-  probT <- sapply(
+  mandpTbygrp <- sapply(
     1:5,
     function(x){
       tts <- distxynear@data[distxynear@data$seq == x, 'TTS']
-      p <- pT(tts)
+      p <- pT(tts)$p
+      m <- mean(tts)
       paste0(
-        'The probability that the mean vector magnitude of T changed by chance in group ',
-        x,
-        ' is ',
-        round(p, 2)
+        'Group ', x, ': ',
+        'm=', round(m*100, 2), '%. ',
+        'p=', round(p, 2), '\n'
       )
     }
+  )
+  
+  #Overal mean value and probabality of change by chance of the magnitude of
+  #Transverse Topographic Basin Symmetry (T)
+  ttsov <- distxynear@data$TTS
+  pov <- pT(ttsov)$p
+  mov <- mean(ttsov)
+  mandpTov <- paste0(
+    'm=', round(mov*100, 2), '%. ',
+    'p=', round(pov, 2), '\n'
   )
   
   #Distance between consecutive points
@@ -237,18 +245,25 @@ TrasnTopoSym <- function(direction, xycoords, suffix){
           dist(subsetted[c(i-1,i),])
       )
       paste0(
-        'The minimum and maximum distances between consecutive points of group ',
-        x,
-        ' are ',
-        round(range(mins)[1], 2),
-        ', ',
-        round(range(mins)[2], 2),
-        ' respectively'
+        'Group ', x, ': ',
+        'min=', round(range(mins)[1], 2), ' m. ',
+        'max=', round(range(mins)[2], 2), ' m\n'
       )
     }
   )
   
   #Exporting results
+  ##Entire sample
+  writeVECT(
+    distxynear,
+    paste0(
+      'tts_TTS_magnitude_bearing_entire_sample_',
+      suffix
+    ),
+    v.in.ogr_flags = 'overwrite'
+  )
+  
+  ##By groups
   sapply(
     unique(distxynear@data$seq),
     function(x){
@@ -259,18 +274,11 @@ TrasnTopoSym <- function(direction, xycoords, suffix){
           x,
           '_',
           suffix
-        )
+        ),
+        v.in.ogr_flags = 'overwrite'
       )
     }
   )
-  
-  # writeOGR(
-  #   distxynear,
-  #   dsn = ttsoutdir,
-  #   layer = ttsfilename,
-  #   driver = 'ESRI Shapefile',
-  #   overwrite_layer = T
-  # )
   
   #Rename GRASS maps to be saved
   execGRASS(
@@ -322,9 +330,31 @@ TrasnTopoSym <- function(direction, xycoords, suffix){
   #Returns:
   return(
     list(
-      'Probabality of change by change of the magnitude of T' = probT,
-      'Distance between consecutive points' = disconpnt,
-      'Spatial object (points with T magnitude and bearing)' = distxynear
+      mandpTov = capture.output(
+        cat(
+          'Overall mean value and probability of change by chance of the magnitude of T',
+          '\n',
+          mandpTov,
+          sep = ''
+        )
+      ),
+      mandpTbygrp = capture.output(
+        cat(
+          'Mean value and probability of change by chance of the magnitude of T by group',
+          '\n',
+          mandpTbygrp,
+          sep = ''
+          )
+        ),
+      disconpnt = capture.output(
+        cat(
+          'Minimum and maximum distances between consecutive points by group',
+          '\n',
+          disconpnt,
+          sep = ''
+          )
+        ),
+      SpatialObjectWithAttributes = distxynear
     )
   )
 }

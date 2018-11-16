@@ -21,5 +21,24 @@ pT <- function(tts){
       length(tts)*
       (1e-04)
   )
-  return(p)
+  m <- mean(tts)
+  mandpT <- paste0(
+    'm=', round(m*100, 2), '%. ',
+    'p=', round(p, 2), '\n'
+  )
+  return(
+    list(
+      result = capture.output(
+        cat(
+          'Mean value and probability of change by chance of the magnitude of T',
+          '\n',
+          mandpT,
+          sep = ''
+        )
+      ),
+      p = p,
+      m = m
+    )
+
+  )
 }
