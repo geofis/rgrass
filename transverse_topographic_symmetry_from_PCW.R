@@ -1,35 +1,35 @@
-TransTopoSym <- function(direction, xycoords, suffix,
-                         grps = 5, ptrim = 0.04){
+TransTopoSymfromPCW <- function(path, centerline, watershed, suffix,
+                                grps = 5, smthpath = F, smthcnt = F, ptrim = 0.04){
   # Calculate the Transverse Topographic Basin Symmetry (T) vector
-  # of a stream path
+  # of a stream path providing path, centerline and watershed polygon
   # Args:
-  #   direction:    Flow direction GRASS raster map. May be generated with r.stream*.
-  #   xycoords:     One vector with the coordinates of the basin outlet.
-  #                 X and Y coordinates must be placed in positions 
-  #                 1 and 2 of the vector, respectively
+  #   path:         GRASS vector map name of the stream path(s).
+  #                 May be generated with r.lfp or r.stream*
+  #   centerline:   GRASS vector map name of the centerline of the watershed basin divide.
+  #                 May be generated with v.voronoi or with the
+  #                 custom function WatershedSkeletonize
+  #   watershed:    GRASS vector map name of the watershed basin divide as a line
   #   suffix:       One string for the names of the GRASS maps and the shapefile.
+  #   smthpath:     Logical. Smoothes the path.
+  #   smthcnt:      Logical. Smoothes the centerline.
   #   grps:         Integer. Number of groups in which to split the sample.
   #                 Must be greater than 1
   #   ptrim:        Proportion of vertices with respect of the total to trim on each endpoint
   # Returns:
-  #   Values and GRASS GIS maps of the magnitude and bearing of T vector of a basin,
-  #   as well as the centerline of the basin and a smoothed version of the longest flow path
+  #   Values and GRASS GIS maps of the magnitude and bearing
+  #   of T vector of a watershed basin
   # Note:
   #   A GRASS session must be initiated using rgrass7 package
   
   # Error handling
-  if (!is.character(direction) || !is.character(suffix)) {
-    stop("Arguments direction and suffix must be character strings.")
-  }
-  if (!length(xycoords)==2) {
-    stop("Argument xycoords must be a vector with two values.")
-  }
-  if (TRUE %in% is.na(xycoords)) {
-    stop("Argument xycoords must not have missing values.")
+  if (!is.character(path) || !is.character(centerline) ||
+      !is.character(watershed) || !is.character(suffix)) {
+    stop("Arguments path, centerline, watershed and suffix must be character strings.")
   }
   if (grps<=1) {
     stop("Argument grps must be greater than 1.")
   }
+  
   
   #Packages
   require(rgrass7)
@@ -43,116 +43,44 @@ TransTopoSym <- function(direction, xycoords, suffix,
   # Groups as integers
   grps <- as.integer(grps)
   
-  # Generates the longest flow path, which is considered the active meanderbelt
-  execGRASS(
-    "r.lfp",
-    flags='overwrite',
-    parameters = list(
-      input = direction,
-      coordinates = xycoords,
-      output = 'tts_tmp_lfp'
-    )
-  )
-  
-  
-  #If r.lfp generates more than one path, randomly select one of them
-  if(vInfo('tts_tmp_lfp')['lines']>1){
+  # Smooth path
+  if (smthpath) {
     execGRASS(
-      'v.category',
-      flags = 'overwrite',
+      "v.generalize",
+      flags='overwrite',
       parameters = list(
-        input = 'tts_tmp_lfp',
-        output = 'tts_tmp_lfp_catdel',
-        option = 'del',
-        cat = -1
+        input = path,
+        output = 'ttsfpcw_tmp_path_smoothed',
+        method = 'reumann',
+        threshold = gmeta()$nsres
       )
     )
-    execGRASS(
-      'v.category',
-      flags = 'overwrite',
-      parameters = list(
-        input = 'tts_tmp_lfp_catdel',
-        output = 'tts_tmp_lfp_catadd',
-        option = 'add',
-        cat = 1
-      )
-    )
-    execGRASS(
-      'v.extract',
-      flags = 'overwrite',
-      parameters = list(
-        input = 'tts_tmp_lfp_catadd',
-        output = 'tts_tmp_lfp',
-        random = 1
-      )
-    )
+    path <- 'ttsfpcw_tmp_path_smoothed'
   }
   
-  
-  
-  
-  # Generate the watershed basin from outlet coordinates and the drainage direction
-  execGRASS(
-    "r.water.outlet",
-    flags='overwrite',
-    parameters = list(
-      input = direction,
-      coordinates = xycoords,
-      output = "tts_tmp_watershed"
+  # Smooth centerline
+  if (smthcnt) {
+    execGRASS(
+      "v.generalize",
+      flags='overwrite',
+      parameters = list(
+        input = centerline,
+        output = 'ttsfpcw_tmp_centerline_smoothed',
+        method = 'reumann',
+        threshold = gmeta()$nsres
+      )
     )
-  )
+    centerline <- 'ttsfpcw_tmp_centerline_smoothed'
+  }
   
-  # Convert the watershed basin to vector format
-  execGRASS(
-    "r.to.vect",
-    flags = 'overwrite',
-    parameters = list(
-      input = 'tts_tmp_watershed',
-      output = 'tts_tmp_watershed',
-      type = 'area'
-    )
-  )
-  
-  # Convert the watershed basin to line vector format
-  execGRASS(
-    "v.to.lines",
-    flags = 'overwrite',
-    parameters = list(
-      input = 'tts_tmp_watershed',
-      output = 'tts_tmp_watershed_lines'
-    )
-  )
-  
-  # Generate the centerline of the watershed basin
-  execGRASS(
-    "v.voronoi",
-    flags = c('overwrite','s'),
-    parameters = list(
-      input = 'tts_tmp_watershed',
-      output = 'tts_tmp_watershed_centerline'
-    )
-  )
-  
-  # Generalize the longest flow path line vector
-  execGRASS(
-    "v.generalize",
-    flags='overwrite',
-    parameters = list(
-      input = 'tts_tmp_lfp',
-      output = 'tts_tmp_lfp_smoothed',
-      method = 'reumann',
-      threshold = gmeta()$nsres
-    )
-  )
-  
-  # Convert the longest flow path line to a point vector
-  # based on the vertices of the generalized flow path
+  # Convert the path line(s) to a point vector
+  # based on the vertices of the path
   execGRASS(
     "v.to.points",
     flags = c('overwrite','i','t'),
     parameters = list(
-      input = 'tts_tmp_lfp_smoothed',
-      output = 'tts_tmp_lfp_pnt',
+      input = path,
+      output = 'ttsfpcw_tmp_path_pnt',
       use = 'vertex',
       dmax = gmeta()$nsres
     )
@@ -164,7 +92,7 @@ TransTopoSym <- function(direction, xycoords, suffix,
   execGRASS(
     "v.db.addtable",
     parameters = list(
-      map = 'tts_tmp_lfp_pnt',
+      map = 'ttsfpcw_tmp_path_pnt',
       layer = 2,
       columns = paste(
         'to_centerline_x double precision',
@@ -176,32 +104,32 @@ TransTopoSym <- function(direction, xycoords, suffix,
     )
   )
   
-  # Calculate shortest distances from vertices of LFP point layer 
-  # to the basin centerline
+  # Calculate shortest distances from vertices of LFP point layer
+  # to the watershed basin centerline
   execGRASS(
     "v.distance",
     flags = 'overwrite',
     parameters = list(
-      from = 'tts_tmp_lfp_pnt',
+      from = 'ttsfpcw_tmp_path_pnt',
       from_layer = '2',
       from_type = 'point',
-      to = 'tts_tmp_watershed_centerline',
+      to = centerline,
       to_type = 'line',
       upload = paste('to_x', 'to_y', sep = ','),
       column = paste('to_centerline_x', 'to_centerline_y', sep = ',')
     )
   )
   
-  # Calculate shortest distances from vertices of LFP point layer 
+  # Calculate shortest distances from vertices of LFP point layer
   # to the basin margin
   execGRASS(
     "v.distance",
     flags = 'overwrite',
     parameters = list(
-      from = 'tts_tmp_lfp_pnt',
+      from = 'ttsfpcw_tmp_path_pnt',
       from_layer = '2',
       from_type = 'point',
-      to = 'tts_tmp_watershed_lines',
+      to = watershed,
       to_type = 'line',
       upload = paste('to_x', 'to_y', sep = ','),
       column = paste('to_basinmargin_x', 'to_basinmargin_y', sep = ',')
@@ -209,8 +137,8 @@ TransTopoSym <- function(direction, xycoords, suffix,
   )
   
   # Importing data into R
-  distxynear <- readVECT('tts_tmp_lfp_pnt', layer = 2)
-  
+  distxynear <- readVECT('ttsfpcw_tmp_path_pnt', layer = 2)
+
   # Trim vertices
   distxynear <- distxynear[
     seq(
@@ -260,7 +188,7 @@ TransTopoSym <- function(direction, xycoords, suffix,
     atan2((to_centerline_y - from_y),(to_centerline_x - from_x)) * 180 / pi
   )
   
-  #Assign an iterative sequence 1 to grps based on cat numbers
+  #Assign an iterative sequence 1 to 5 based on cat numbers
   #as an index for subsetting points based on a somewhat constant distance
   distxynear@data$seq <- (distxynear@data$cat - 1) %% grps + 1
   
@@ -317,7 +245,7 @@ TransTopoSym <- function(direction, xycoords, suffix,
   writeVECT(
     distxynear,
     paste0(
-      'tts_points_with_magnitude_bearing_entire_sample_',
+      'ttsfpcw_points_with_magnitude_bearing_entire_sample_',
       suffix
     ),
     v.in.ogr_flags = 'overwrite'
@@ -330,7 +258,7 @@ TransTopoSym <- function(direction, xycoords, suffix,
   #     writeVECT(
   #       distxynear[distxynear@data$seq == x,],
   #       paste0(
-  #         'tts_points_with_magnitude_bearing_group_',
+  #         'ttsfpcw_points_with_magnitude_bearing_group_',
   #         x,
   #         '_',
   #         suffix
@@ -341,54 +269,49 @@ TransTopoSym <- function(direction, xycoords, suffix,
   # )
   
   #Rename GRASS maps to be saved
-  ##The LFP smoothed
-  execGRASS(
-    "g.rename",
-    flags = 'overwrite',
-    parameters = list(
-      vector = paste0(
-        'tts_tmp_lfp_smoothed,',
-        'tts_lfp_smoothed_',
-        suffix
-      )
-    )
-  )
   ##The LFP as a point map
   execGRASS(
     "g.rename",
     flags = 'overwrite',
     parameters = list(
       vector = paste0(
-        'tts_tmp_lfp_pnt,',
-        'tts_lfp_pnt_',
+        'ttsfpcw_tmp_path_pnt,',
+        'ttsfpcw_path_pnt_',
         suffix
       )
     )
   )
-  ##The basin centerline
-  execGRASS(
-    "g.rename",
-    flags = 'overwrite',
-    parameters = list(
-      vector = paste0(
-        'tts_tmp_watershed_centerline,',
-        'tts_watershed_centerline_',
-        suffix
+  
+  ##The smoothed maps
+  if (smthpath) {
+    execGRASS(
+      "g.rename",
+      flags = 'overwrite',
+      parameters = list(
+        vector = paste0(
+          path,
+          ',',
+          'ttsfpcw_path_smoothed',
+          suffix
+        )
       )
     )
-  )
-  ##The watershed polygon
-  execGRASS(
-    "g.rename",
-    flags = 'overwrite',
-    parameters = list(
-      vector = paste0(
-        'tts_tmp_watershed,',
-        'tts_watershed_polygon_',
-        suffix
+  }
+  
+  if (smthcnt) {
+    execGRASS(
+      "g.rename",
+      flags = 'overwrite',
+      parameters = list(
+        vector = paste0(
+          centerline,
+          ',',
+          'ttsfpcw_centerline_smoothed',
+          suffix
+        )
       )
     )
-  )
+  }
   
   #Remove tmp maps
   execGRASS(
@@ -396,7 +319,7 @@ TransTopoSym <- function(direction, xycoords, suffix,
     flags = 'f',
     parameters = list(
       type = c('raster','vector'),
-      pattern = 'tts_tmp*'
+      pattern = 'ttsfpcw_tmp*'
     )
   )
   

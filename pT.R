@@ -16,15 +16,19 @@ pT <- function(tts){
   if (!is.numeric(tts)) {
     stop("Argument tts must be a numeric vector")
   }
+  tts <- as.vector(na.omit(tts))
+  n <- length(tts)
   p <- exp(
     -((mean(tts)*100)^2)*
-      length(tts)*
+      n*
       (1e-04)
   )
   m <- mean(tts)
   mandpT <- paste0(
     'm=', round(m*100, 2), '%. ',
-    'p=', round(p, 2), '\n'
+    'p=', round(p, 4), ', ',
+    'n=', n, '.\n'
+    
   )
   return(
     list(
@@ -37,8 +41,9 @@ pT <- function(tts){
         )
       ),
       p = p,
-      m = m
+      m = m,
+      n = n
     )
-
+    
   )
 }
