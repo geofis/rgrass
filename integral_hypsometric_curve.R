@@ -37,6 +37,7 @@ HypsoIntCurve <- function(basins, dem, labelfield, nrow,
   require(directlabels)
   require(scales)
   require(gtools)
+  require(plyr)
   
   # Read the sources
   if(class(basins)=="SpatialPolygonsDataFrame") {

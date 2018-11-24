@@ -1,6 +1,6 @@
 SourcesForTransTopoSym <- function(direction, xycoords, prefix,
                                    smthpathf = 3, smthwatshdf = 3, thin = -1,
-                                   tspacing = 100, fdistft = 1){
+                                   tspacing = 100, fdistft = 1, stream = NA){
   # Generates the sources for calculating the Transverse Topographic Basin Symmetry (T)
   # vector of a stream path given the coordinates of a basin
   # Args:
@@ -15,7 +15,7 @@ SourcesForTransTopoSym <- function(direction, xycoords, prefix,
   #                 simplification increases with the increasing value of threshold.
   #                 This important parameter controls whether the transects (perpendicular to
   #                 the path) will be meaningful or not.
-  #   smthwatshdf:   Numeric. Factor to which multiply region resolution.
+  #   smthwatshdf:  Numeric. Factor to which multiply region resolution.
   #                 resolution*smthwatshd is passed a to v.generalize as threshold
   #                 parameter. The threshold parameter, given in map units is the degree of
   #                 simplification increases with the increasing value of threshold.
@@ -25,6 +25,8 @@ SourcesForTransTopoSym <- function(direction, xycoords, prefix,
   #   tspacing:     Separation between transects (in map units)
   #   fdistft:      Factor to multiply the length of the longest flow path. The product is used
   #                 as the distance transect extends to the left and the right of the flow path.
+  #   stream:      Name of a user-generated stream. If NA (the default),
+  #                 the function generates it.
   # Returns:
   #   Values and GRASS GIS maps of the magnitude and bearing of T vector of a basin,
   #   as well as the centerline of the basin and a smoothed version of the longest flow path
@@ -47,61 +49,74 @@ SourcesForTransTopoSym <- function(direction, xycoords, prefix,
   require(rgeos)
   require(sp)
 
-  # Generates the longest flow path, which is considered the active meanderbelt
-  execGRASS(
-    "r.lfp",
-    flags='overwrite',
-    parameters = list(
-      input = direction,
-      coordinates = xycoords,
-      output = 'tts_tmp_lfp'
-    )
-  )
-  
-  #If r.lfp generates more than one path, randomly select one of them
-  if(vInfo('tts_tmp_lfp')['lines']>1){
+  if(is.na(stream)) {
+    # Generates the longest flow path, which is considered the active meanderbelt
     execGRASS(
-      'v.category',
-      flags = 'overwrite',
+      "r.lfp",
+      flags='overwrite',
+      parameters = list(
+        input = direction,
+        coordinates = xycoords,
+        output = 'tts_tmp_lfp'
+      )
+    )
+    
+    #If r.lfp generates more than one path, randomly select one of them
+    if(vInfo('tts_tmp_lfp')['lines']>1){
+      execGRASS(
+        'v.category',
+        flags = 'overwrite',
+        parameters = list(
+          input = 'tts_tmp_lfp',
+          output = 'tts_tmp_lfp_catdel',
+          option = 'del',
+          cat = -1
+        )
+      )
+      execGRASS(
+        'v.category',
+        flags = 'overwrite',
+        parameters = list(
+          input = 'tts_tmp_lfp_catdel',
+          output = 'tts_tmp_lfp_catadd',
+          option = 'add',
+          cat = 1
+        )
+      )
+      execGRASS(
+        'v.extract',
+        flags = 'overwrite',
+        parameters = list(
+          input = 'tts_tmp_lfp_catadd',
+          output = 'tts_tmp_lfp',
+          random = 1
+        )
+      )
+    }
+    
+    # Generalize the longest flow path line vector
+    execGRASS(
+      "v.generalize",
+      flags='overwrite',
       parameters = list(
         input = 'tts_tmp_lfp',
-        output = 'tts_tmp_lfp_catdel',
-        option = 'del',
-        cat = -1
+        output = 'tts_tmp_lfp_smoothed',
+        method = 'reumann',
+        threshold = gmeta()$nsres*smthpathf
       )
     )
+  } else {
     execGRASS(
-      'v.category',
-      flags = 'overwrite',
+      "v.generalize",
+      flags='overwrite',
       parameters = list(
-        input = 'tts_tmp_lfp_catdel',
-        output = 'tts_tmp_lfp_catadd',
-        option = 'add',
-        cat = 1
-      )
-    )
-    execGRASS(
-      'v.extract',
-      flags = 'overwrite',
-      parameters = list(
-        input = 'tts_tmp_lfp_catadd',
-        output = 'tts_tmp_lfp',
-        random = 1
+        input = stream,
+        output = 'tts_tmp_lfp_smoothed',
+        method = 'reumann',
+        threshold = gmeta()$nsres*smthpathf
       )
     )
   }
-  
-  # Generalize the longest flow path line vector
-  execGRASS(
-    "v.generalize",
-    flags='overwrite',
-    parameters = list(
-      input = 'tts_tmp_lfp',
-      output = 'tts_tmp_lfp_smoothed',
-      method = 'reumann',
-      threshold = gmeta()$nsres*smthpathf
-    )
-  )
 
   # Generate the watershed basin from outlet coordinates and the drainage direction
   execGRASS(
@@ -135,17 +150,7 @@ SourcesForTransTopoSym <- function(direction, xycoords, prefix,
     )
   )
   
-  # Convert the watershed basin to line vector format
-  execGRASS(
-    "v.to.lines",
-    flags = 'overwrite',
-    parameters = list(
-      input = 'tts_tmp_watershed',
-      output = 'tts_tmp_watershed_lines'
-    )
-  )
-  
-  # Generalize the longest flow path line vector
+  # Generalize basin divide
   execGRASS(
     "v.generalize",
     flags='overwrite',
@@ -227,6 +232,18 @@ SourcesForTransTopoSym <- function(direction, xycoords, prefix,
       vector = paste0(
         'tts_tmp_watershed_lines_smoothed,',
         'tts_', prefix, '_wshed_divide'
+      )
+    )
+  )
+  
+  ##The watershed polygon
+  execGRASS(
+    "g.rename",
+    flags = 'overwrite',
+    parameters = list(
+      vector = paste0(
+        'tts_tmp_watershed_lines_smoothed_polygon_with_centroid,',
+        'tts_', prefix, '_wshed_polygon'
       )
     )
   )
