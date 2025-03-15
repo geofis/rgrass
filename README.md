@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/151991844.svg)](https://doi.org/10.5281/zenodo.15033018)
+
 # R Functions for Hydrology and Morphometry
 
 This repository contains a collection of R functions specifically designed for computational hydrology and morphometric analyses. These functions leverage the capabilities of GRASS GIS 7 and utilize the archived R package `rgrass7`. They are particularly suited for detailed studies of watersheds and drainage networks.
